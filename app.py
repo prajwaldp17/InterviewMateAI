@@ -1,22 +1,25 @@
 
 import streamlit as st
+
 from ai_engine import get_ai_feedback
-
-# -------------------------
-# 1. Page setup
-# -------------------------
-
 from feedback import (
     count_words,
     check_keywords,
     calculate_score,
     give_suggestions
 )
+from history import init_db, save_interview, get_history
+
+# -------------------------
+# 1. Page setup
+# -------------------------
 
 st.set_page_config(
     page_title="InterviewMate AI",
     page_icon="🎯"
 )
+
+init_db()
 
 st.title("🎯 InterviewMate AI")
 st.write("Practice interviews and improve your answers.")
@@ -84,9 +87,8 @@ question_bank = {
     }
 }
 
-
 # -------------------------
-# 7. User interface
+# 3. Select interview question
 # -------------------------
 
 category = st.selectbox(
@@ -108,43 +110,15 @@ answer = st.text_area(
 )
 
 # -------------------------
-# 8. Review the answer
+# 4. Rule-based answer review
 # -------------------------
 
 st.divider()
-
-st.subheader("🤖 AI-Powered Interview Feedback")
-
-with st.form("ai_feedback_form"):
-    get_ai = st.form_submit_button(
-        "Get Detailed AI Feedback"
-    )
-
-if get_ai:
-    if not answer.strip():
-        st.warning("Please enter your answer first.")
-    else:
-        with st.spinner("AI is reviewing your answer..."):
-            try:
-                ai_feedback = get_ai_feedback(
-                    question,
-                    answer
-                )
-                st.markdown(ai_feedback)
-
-            except Exception as error:
-                st.error(
-                    "AI feedback failed. Check that Ollama "
-                    "is running and the model is installed."
-                )
-                st.caption(str(error))
-
+st.subheader("📊 Basic Interview Review")
 
 if st.button("Review My Answer"):
-
     if not answer.strip():
-        st.warning("Please enter an answer first.")
-
+        st.warning("Please enter your answer first.")
     else:
         word_count = count_words(answer)
 
@@ -160,18 +134,21 @@ if st.button("Review My Answer"):
 
         suggestions = give_suggestions(word_count, missing)
 
-        st.subheader("📊 Your Feedback")
+        st.subheader("Your Results")
 
         col1, col2, col3 = st.columns(3)
 
         col1.metric("Total Score", f"{total_score}/10")
         col2.metric("Word Count", word_count)
-        col3.metric("Keywords Matched", f"{len(matched)}/{len(keywords)}")
+        col3.metric(
+            "Keywords Matched",
+            f"{len(matched)}/{len(keywords)}"
+        )
 
         st.write(f"**Answer length score:** {length_score}/5")
         st.write(f"**Keyword score:** {keyword_score}/5")
 
-        st.progress(total_score / 10)
+        st.progress(max(0.0, min(1.0, total_score / 10)))
 
         st.subheader("✅ Concepts Found")
 
@@ -193,7 +170,6 @@ if st.button("Review My Answer"):
             st.write("- " + suggestion)
 
         st.subheader("📝 Sample Answer")
-
         st.write(question_bank[category][question]["sample"])
 
         st.caption(
@@ -201,3 +177,141 @@ if st.button("Review My Answer"):
             "It does not measure factual correctness, communication "
             "quality, or the full meaning of your answer."
         )
+
+        # Save the rule-based score for progress tracking.
+        st.session_state["latest_basic_review"] = {
+            "category": category,
+            "question": question,
+            "answer": answer,
+            "score": total_score
+        }
+
+# -------------------------
+# 5. AI-powered feedback
+# -------------------------
+
+st.divider()
+st.subheader("🤖 AI-Powered Interview Feedback")
+
+with st.form("ai_feedback_form"):
+    get_ai = st.form_submit_button("Get Detailed AI Feedback")
+
+if get_ai:
+    if not answer.strip():
+        st.warning("Please enter your answer first.")
+    else:
+        with st.spinner("AI is reviewing your answer..."):
+            try:
+                ai_feedback = get_ai_feedback(question, answer)
+
+                st.markdown(ai_feedback)
+
+                # Use the latest basic score only when it belongs
+                # to the same category, question, and answer.
+                latest_review = st.session_state.get(
+                    "latest_basic_review"
+                )
+
+                score_to_save = None
+
+                if (
+                    latest_review
+                    and latest_review["category"] == category
+                    and latest_review["question"] == question
+                    and latest_review["answer"] == answer
+                ):
+                    score_to_save = latest_review["score"]
+
+                save_interview(
+                    category=category,
+                    question=question,
+                    answer=answer,
+                    feedback=ai_feedback,
+                    score=score_to_save
+                )
+
+                st.success("Interview review saved to your history!")
+
+            except Exception as error:
+                st.error(
+                    "AI feedback failed. Check that Ollama is running "
+                    "and the model is installed."
+                )
+                st.caption(str(error))
+
+# -------------------------
+# 6. Interview history
+# -------------------------
+
+st.divider()
+st.header("📚 Interview History")
+
+interview_history = get_history()
+
+if not interview_history:
+    st.info(
+        "No interview history yet. "
+        "Complete your first AI review to see it here."
+    )
+else:
+    st.write(f"Total saved interviews: {len(interview_history)}")
+
+    for record in interview_history:
+        (
+            interview_id,
+            saved_category,
+            saved_question,
+            saved_answer,
+            saved_feedback,
+            saved_score,
+            created_at
+        ) = record
+
+        with st.expander(
+            f"{saved_category} | {saved_question} | {created_at}"
+        ):
+            st.markdown("**Your answer**")
+            st.write(saved_answer)
+
+            st.markdown("**AI feedback**")
+            st.write(saved_feedback)
+
+            if saved_score is not None:
+                st.write(f"**Basic review score:** {saved_score}/10")
+
+# -------------------------
+# 7. Progress tracking
+# -------------------------
+
+st.divider()
+st.header("📈 Your Progress")
+
+total_interviews = len(interview_history)
+
+scored_interviews = [
+    record
+    for record in interview_history
+    if record[5] is not None
+]
+
+average_score = (
+    sum(record[5] for record in scored_interviews)
+    / len(scored_interviews)
+    if scored_interviews
+    else None
+)
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("Total AI Reviews", total_interviews)
+col2.metric("Reviews With Scores", len(scored_interviews))
+
+if average_score is not None:
+    col3.metric("Average Basic Score", f"{average_score:.1f}/10")
+else:
+    col3.metric("Average Basic Score", "Not available")
+
+st.caption(
+    "Progress scores come from your rule-based review out of 10. "
+    "AI feedback is stored separately and is not automatically scored."
+)
