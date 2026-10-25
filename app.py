@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import csv
 import io
+from resume_interview import show_resume_interview
 
 from ai_engine import get_ai_feedback
 from feedback import (
@@ -290,6 +291,7 @@ with st.sidebar:
         [
             "🏠 Dashboard",
             "🎤 Practice Interview",
+            "📄 Resume Interview",
             "📚 Interview History",
             "📈 Progress & Reports",
         ],
@@ -965,3 +967,6 @@ elif page == "📈 Progress & Reports":
         st.info(
             "Complete an AI review before exporting a report."
         )
+        
+elif page == "📄 Resume Interview":
+    show_resume_interview()
