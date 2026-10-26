@@ -3,6 +3,7 @@ import pandas as pd
 import csv
 import io
 from resume_interview import show_resume_interview
+from voice_interview import show_voice_interview
 
 from ai_engine import get_ai_feedback
 from feedback import (
@@ -289,11 +290,12 @@ with st.sidebar:
     page = st.radio(
         "Navigation",
         [
-            "🏠 Dashboard",
-            "🎤 Practice Interview",
-            "📄 Resume Interview",
-            "📚 Interview History",
-            "📈 Progress & Reports",
+        "🏠 Dashboard",
+        "🎤 Practice Interview",
+        "🎙️ Voice Interview",
+        "📄 Resume Interview",
+        "📚 Interview History",
+        "📈 Progress & Reports",
         ],
         label_visibility="visible",
         key="nav_page",
@@ -970,3 +972,7 @@ elif page == "📈 Progress & Reports":
         
 elif page == "📄 Resume Interview":
     show_resume_interview()
+
+elif page == "🎙️ Voice Interview":
+    show_voice_interview()
+    
